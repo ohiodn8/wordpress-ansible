@@ -1,0 +1,22 @@
+---
+# add php repository
+- name: add php repository
+  ignore_errors: True
+  shell: sudo apt-add-repository -y ppa:ondrej/php
+
+- name: Update apt cache
+  apt: update_cache=yes cache_valid_time=3600
+  become: yes
+
+# php dependencies
+- name: Install PHP Extensions
+  apt: name={{ item }} state=present
+  become: yes
+  with_items:
+    - php7.0-gd
+    - php7.0-cli	
+    - php7.0-curl
+    - php7.0-mbstring
+    - php7.0-mcrypt
+    - php7.0-opcache
+    - php-apcu
