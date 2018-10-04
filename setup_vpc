@@ -1,0 +1,185 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation to Setup networking (e.g. vpc, subnet, route table, ...), install Ansible, and then clone a playbook to install Wordpress on Ubuntu AWS Instance. You'll be billed for the AWS resources used if you create a stack from this template. [cat /var/log/cloud-init-output.log to check cf error & cat /var/lib/cloud/instance/scripts/part-001 to view script]",
+
+  "Parameters" : {
+
+    "KeyName": {
+      "Description" : "Existing EC2 KeyPair to enable SSH access to the instances",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+    },
+    
+    "SubnetCIDR" : {
+      "Description" : "SUBNET CIDR BLOCK e.g. 150.0.0.0/24",
+      "Type" : "String",
+      "Default" : "10.0.0.0/24"    
+    },    
+    
+    "vpcCIDR" : {
+      "Description" : "VPC CIDR BLOCK e.g. 150.0.0.0/16",
+      "Type" : "String",
+      "Default" : "10.0.0.0/16"    
+    },    
+
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "t2.micro",
+      "AllowedValues" : [ "t2.micro", "t2.small"]
+,
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "SSHLocation": {
+      "Description": "The IP address range that can be used to SSH to the EC2 instances: SG Inbound Rule",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    }
+  },
+
+  "Mappings" : {
+    "AWSInstanceType2Arch" : {
+      "t2.nano"     : { "Arch" : "HVM64"  },
+      "t2.micro"    : { "Arch" : "HVM64"  }
+    },
+
+    "AWSInstanceType2NATArch" : {
+      "t2.nano"     : { "Arch" : "NATHVM64"  },
+      "t2.micro"    : { "Arch" : "NATHVM64"  }
+    }
+,
+    "AWSRegionArch2AMI" : {
+      "us-east-1"        : {"HVM64" : "ami-0ac019f4fcb7cb7e6"},
+      "us-east-2"        : {"HVM64" : "ami-0f65671a86f061fcd"},
+      "us-west-2"        : {"HVM64" : "ami-0bbe6b35405ecebdb"},
+      "us-west-1"        : {"HVM64" : "ami-063aa838bd7631e0b"}
+    }
+
+  },
+
+  "Resources" : {
+    "VPC" : {
+      "Type" : "AWS::EC2::VPC",
+      "Properties" : {
+        "EnableDnsSupport" : "true",
+        "EnableDnsHostnames" : "true",
+        "CidrBlock" : { "Ref" : "vpcCIDR" }
+      }
+    },
+    "PublicSubnet" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "CidrBlock" : { "Ref" : "SubnetCIDR" }
+      }
+    },
+    "InternetGateway" : {
+      "Type" : "AWS::EC2::InternetGateway"
+    },
+    "VPCGatewayAttachment" : {
+       "Type" : "AWS::EC2::VPCGatewayAttachment",
+       "Properties" : {
+         "VpcId" : { "Ref" : "VPC" },
+         "InternetGatewayId" : { "Ref" : "InternetGateway" }
+       }
+    },
+    "PublicRouteTable" : {
+      "Type" : "AWS::EC2::RouteTable",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" }
+      }
+    },
+    "PublicRoute" : {
+      "Type" : "AWS::EC2::Route",
+      "DependsOn" : "VPCGatewayAttachment",
+      "Properties" : {
+        "RouteTableId" : { "Ref" : "PublicRouteTable" },
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "GatewayId" : { "Ref" : "InternetGateway" }
+      }
+    },
+    "PublicSubnetRouteTableAssociation" : {
+      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PublicSubnet" },
+        "RouteTableId" : { "Ref" : "PublicRouteTable" }
+      }
+    },
+    "PublicSubnetNetworkAclAssociation" : {
+      "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PublicSubnet" },
+        "NetworkAclId" : { "Fn::GetAtt" : ["VPC", "DefaultNetworkAcl"] }
+      }
+    },  
+    "WebServerSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP access via port 80 locked down to the load balancer + SSH access",
+        "VpcId" : { "Ref" : "VPC" },
+        "SecurityGroupIngress" : [
+          {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"},
+          {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : { "Ref" : "SSHLocation"}}
+        ]
+      }
+    },      
+
+    "WebServer": {
+      "Type" : "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+        "InstanceType"   : { "Ref" : "InstanceType" },
+        "NetworkInterfaces" : [{
+          "GroupSet"                 : [{"Ref": "WebServerSecurityGroup"}],
+          "AssociatePublicIpAddress" : "true",
+          "DeviceIndex"              : "0",
+          "DeleteOnTermination"      : "true",
+          "SubnetId"                 : {"Ref": "PublicSubnet"}
+        }],
+        "KeyName"        : { "Ref" : "KeyName" },
+        "UserData" : { "Fn::Base64" : { "Fn::Join" : ["\n", [
+                       "#!/bin/bash -xe",
+                       "sudo apt-get update -y",
+                       "sudo apt-get install -y git",
+                       "sudo apt-get install -y software-properties-common",
+                       "sudo apt-add-repository -y ppa:ansible/ansible",
+                       "sudo apt-get update -y",
+                       "sudo apt-get install -y ansible",
+                       "cd /home/ubuntu && git clone https://github.com/ohiodn8/wordpress-ansible.git",
+                       "ansible-playbook -i /home/ubuntu/wordpress-ansible/hosts  /home/ubuntu/wordpress-ansible/mysql_db.yml",
+                       "ansible-playbook -i /home/ubuntu/wordpress-ansible/hosts  /home/ubuntu/wordpress-ansible/playbook.yml"
+        ]]}}
+      }
+    }
+  },
+
+  "Outputs" : {
+    "WebsiteURL" : {
+      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "WebServer", "PublicDnsName" ]} ]]},
+      "Description" : "WordPress Website"
+    },
+    "InstanceId" : {
+      "Description" : "InstanceId of the newly created EC2 instance",
+      "Value" : { "Ref" : "WebServer" }
+    },
+    "AZ" : {
+      "Description" : "Availability Zone of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "WebServer", "AvailabilityZone" ] }
+    },
+    "PublicIP" : {
+      "Description" : "Public IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "WebServer", "PublicIp" ] }
+    },
+    "KeyName" : {
+      "Description" : "KeyPair name to ssh into the instamce",
+      "Value" : { "Ref" : "KeyName" }
+    }    
+  }
+}
