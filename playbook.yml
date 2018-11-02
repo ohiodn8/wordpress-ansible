@@ -4,5 +4,5 @@
   roles:
     - server
     - php
-    ##- mysql
+    - mysql
     - wordpress
