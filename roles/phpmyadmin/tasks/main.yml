@@ -1,0 +1,21 @@
+---
+- name: Install PHP My Admin
+  become: yes
+  command: apt install phpmyadmin -y
+
+- name: apache2 restart
+  become: yes
+  command: systemctl restart apache2
+
+- name: Copy PHP Conf to Apache2
+  become: yes
+  command: cp /etc/phpmyadmin/apache.conf /etc/apache2/conf-available/phpmyad$
+
+- name: Continue with PHP MyAdmin Setup
+  become: yes
+  command: a2enconf phpmyadmin
+
+- name: ensure apache is running
+  service:
+    name: apache2
+    state: started
