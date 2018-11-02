@@ -27,3 +27,39 @@
 - name: Removes the MySQL test database
   mysql_db: db=test state=absent login_password="{{ MySQL_root_pass }}" login_user="{{ MYSQL_user }}"
   become: yes
+
+- name: debconf for PhpMyAdmin
+  debconf: name=phpmyadmin question='phpmyadmin/dbconfig-install' value='true' vtype='boolean'
+
+- name: debconf for PhpMyAdmin
+  debconf: name=phpmyadmin question='phpmyadmin/app-password-confirm' value='{{MySQL_root_pass}}' vtype='password'
+
+- name: debconf for PhpMyAdmin
+  debconf: name=phpmyadmin question='phpmyadmin/mysql/admin-pass' value='{{MySQL_root_pass}}' vtype='password'
+
+- name: debconf for PhpMyAdmin
+  debconf: name=phpmyadmin question='phpmyadmin/mysql/app-pass' value='{{MySQL_root_pass}}' vtype='password'
+
+- name: debconf for PhpMyAdmin
+  debconf: name=phpmyadmin question='phpmyadmin/reconfigure-webserver' value='apache2' vtype='multiselect'
+
+- name: install PhpMyAdmin
+  apt: pkg=phpmyadmin state=present
+
+- name: restart apache
+  service:
+    name: apache2
+    state: restarted
+
+- name: Copy PHP Conf to Apache2
+  become: yes
+  command: cp /etc/phpmyadmin/apache.conf /etc/apache2/conf-available/phpmyad$
+
+- name: Continue with PHP MyAdmin Setup
+  become: yes
+  command: a2enconf phpmyadmin
+
+- name: ensure apache is running
+  service:
+    name: apache2
+    state: started
