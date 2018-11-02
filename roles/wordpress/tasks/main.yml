@@ -47,3 +47,10 @@
   service:
     name: apache2
     state: restarted
+    
+- name: PhpMyAdmin Username and Password is root
+  shell: echo "PhpMyAdmin username > root, password > root"
+  register: echo
+  args:
+    executable: /bin/bash
+- debug: var=echo.stdout_lines
