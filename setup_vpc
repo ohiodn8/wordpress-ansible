@@ -155,7 +155,6 @@
                        "sudo apt-get update -y",
                        "sudo apt-get install -y ansible",
                        "cd /home/ubuntu && git clone https://github.com/ohiodn8/wordpress-ansible.git",
-                       "ansible-playbook -i /home/ubuntu/wordpress-ansible/hosts  /home/ubuntu/wordpress-ansible/mysql_db.yml",
                        "ansible-playbook -i /home/ubuntu/wordpress-ansible/hosts  /home/ubuntu/wordpress-ansible/playbook.yml"
         ]]}}
       }
