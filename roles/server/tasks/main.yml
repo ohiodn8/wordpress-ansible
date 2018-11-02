@@ -2,7 +2,8 @@
 # add php repository
 - name: add php repository
   ignore_errors: True
-  shell: sudo apt-add-repository -y ppa:ondrej/php
+  become: yes
+  shell: apt-add-repository -y ppa:ondrej/php
 
 # Install Apache for wordpress_server
 - name: Update apt cache
