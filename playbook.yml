@@ -5,5 +5,5 @@
     - server
     - php
     - mysql
-    - phpmyadmin
+  #  - phpmyadmin
     - wordpress
